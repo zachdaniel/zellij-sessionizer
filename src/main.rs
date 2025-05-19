@@ -15,6 +15,9 @@ use textinput::TextInput;
 
 const ROOT: &str = "/host";
 
+// TODO: add a way to switch between the dirlist and the new-to-be session list
+// as means to navigate only existing sessions
+
 #[derive(Debug, Default)]
 struct State {
     dirlist: DirList,
@@ -92,6 +95,8 @@ impl ZellijPlugin for State {
             let host_path = host.join(relative_path);
             scan_host_folder(&host_path);
         }
+        //TODO: likely would need to pre-populate the session list here
+        //and handle updates upon receiving the SessionUpdate event maybe?
     }
 
     fn update(&mut self, event: Event) -> bool {
@@ -122,16 +127,25 @@ impl ZellijPlugin for State {
                     }
                     KeyWithModifier {
                         bare_key: BareKey::Down,
-                        key_modifiers: _,
-                    } => {
+                        key_modifiers: km,
+                    }
+                    | KeyWithModifier {
+                        bare_key: BareKey::Char('j'),
+                        key_modifiers: km,
+                    } if km.contains(&KeyModifier::Ctrl) => {
                         self.dirlist.handle_down();
                     }
                     KeyWithModifier {
                         bare_key: BareKey::Up,
-                        key_modifiers: _,
-                    } => {
+                        key_modifiers: km,
+                    }
+                    | KeyWithModifier {
+                        bare_key: BareKey::Char('k'),
+                        key_modifiers: km,
+                    } if km.contains(&KeyModifier::Ctrl) => {
                         self.dirlist.handle_up();
                     }
+                    // TODO: add Ctrl+x or Ctrl+d or something along these lines to kill sessions
                     KeyWithModifier {
                         bare_key: BareKey::Enter,
                         key_modifiers: _,
