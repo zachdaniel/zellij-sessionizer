@@ -18,12 +18,25 @@ const ROOT: &str = "/host";
 // TODO: add a way to switch between the dirlist and the new-to-be session list
 // as means to navigate only existing sessions
 
+#[derive(Debug)]
+enum Screen {
+    SearchDirs,
+    SearchSessions,
+}
+
+impl Default for Screen {
+    fn default() -> Self {
+        return Screen::SearchDirs;
+    }
+}
+
 #[derive(Debug, Default)]
 struct State {
     dirlist: DirList,
     cwd: PathBuf,
     textinput: TextInput,
     current_session: String,
+    screen: Screen,
 
     config: Config,
     debug: String,
