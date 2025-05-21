@@ -31,13 +31,13 @@ impl TextInput {
     pub fn reset(&mut self) {
         self.text.clear();
     }
-    
+
     pub fn get_text(&self) -> String {
         self.text.iter().collect::<String>()
     }
 
     pub fn handle_backspace(&mut self) {
-            self.text.pop();
+        self.text.pop();
     }
 
     pub fn handle_char(&mut self, c: char) {
@@ -47,9 +47,19 @@ impl TextInput {
         self.text.push(c);
     }
 
+    pub fn replace_text(&mut self, txt: &str) -> String {
+        let prev_text = self.text.iter().collect::<String>();
+        self.reset();
+        self.text = txt.chars().collect();
+        prev_text
+    }
+
     pub fn render(&self, _rows: usize, _cols: usize) {
         let search_term = self.text.iter().collect::<String>();
-        let search_bar_content = format!("{} {}{}", self.marker_symbol, search_term, self.cursor_symbol);
+        let search_bar_content = format!(
+            "{} {}{}",
+            self.marker_symbol, search_term, self.cursor_symbol
+        );
         let search_bar_len = search_bar_content.len();
         let search_bar = Text::new(search_bar_content)
             .color_range(self.marker_color, 0..1)

@@ -9,14 +9,13 @@ use config::Config;
 mod config;
 mod dirlist;
 mod filter;
+mod sesslist;
 mod textinput;
 use dirlist::DirList;
+use sesslist::SessList;
 use textinput::TextInput;
 
 const ROOT: &str = "/host";
-
-// TODO: add a way to switch between the dirlist and the new-to-be session list
-// as means to navigate only existing sessions
 
 #[derive(Debug)]
 enum Screen {
@@ -33,10 +32,12 @@ impl Default for Screen {
 #[derive(Debug, Default)]
 struct State {
     dirlist: DirList,
+    sesslist: SessList,
     cwd: PathBuf,
     textinput: TextInput,
     current_session: String,
     screen: Screen,
+    textinput_dump: String,
 
     config: Config,
     debug: String,
@@ -108,8 +109,8 @@ impl ZellijPlugin for State {
             let host_path = host.join(relative_path);
             scan_host_folder(&host_path);
         }
-        //TODO: likely would need to pre-populate the session list here
-        //and handle updates upon receiving the SessionUpdate event maybe?
+        self.screen = Screen::SearchDirs;
+        self.textinput_dump = "".to_string();
     }
 
     fn update(&mut self, event: Event) -> bool {
@@ -121,17 +122,31 @@ impl ZellijPlugin for State {
                 should_render = true;
             }
             Event::SessionUpdate(sessions, _) => {
+                //TODO: I may want to handle this inside the sess list
+                //and also set the cursor always to the current session
                 for session in sessions.iter() {
                     if session.is_current_session {
                         self.current_session = session.name.clone();
-                        break;
                     }
                 }
+                self.sesslist
+                    .update_sessions(sessions.into_iter().map(|s| s.name).collect());
                 should_render = true;
             }
             Event::Key(key) => {
                 should_render = true;
                 match key {
+                    KeyWithModifier {
+                        bare_key: BareKey::Tab,
+                        key_modifiers: _,
+                    } => {
+                        self.textinput_dump =
+                            self.textinput.replace_text(self.textinput_dump.as_str());
+                        self.screen = match self.screen {
+                            Screen::SearchDirs => Screen::SearchSessions,
+                            Screen::SearchSessions => Screen::SearchDirs,
+                        }
+                    }
                     KeyWithModifier {
                         bare_key: BareKey::Esc,
                         key_modifiers: _,
@@ -141,40 +156,62 @@ impl ZellijPlugin for State {
                     KeyWithModifier {
                         bare_key: BareKey::Char('n'),
                         key_modifiers: km,
-                    } if km.contains(&KeyModifier::Ctrl) => {
-                        self.dirlist.handle_down();
-                    }
+                    } if km.contains(&KeyModifier::Ctrl) => match self.screen {
+                        Screen::SearchDirs => self.dirlist.handle_down(),
+                        Screen::SearchSessions => self.sesslist.handle_down(),
+                    },
                     KeyWithModifier {
                         bare_key: BareKey::Char('p'),
                         key_modifiers: km,
-                    } if km.contains(&KeyModifier::Ctrl) => {
-                        self.dirlist.handle_up();
-                    }
+                    } if km.contains(&KeyModifier::Ctrl) => match self.screen {
+                        Screen::SearchDirs => self.dirlist.handle_up(),
+                        Screen::SearchSessions => self.sesslist.handle_up(),
+                    },
                     // TODO: add Ctrl+x or Ctrl+d or something along these lines to kill sessions
                     KeyWithModifier {
                         bare_key: BareKey::Enter,
                         key_modifiers: _,
-                    } => {
-                        if let Some(selected) = self.dirlist.get_selected() {
-                            let _ = self.switch_session_with_cwd(Path::new(&selected));
-                            close_self();
+                    } => match self.screen {
+                        Screen::SearchDirs => {
+                            if let Some(selected) = self.dirlist.get_selected() {
+                                let _ = self.switch_session_with_cwd(Path::new(&selected));
+                                close_self();
+                            }
                         }
-                    }
+                        Screen::SearchSessions => {
+                            if let Some(selected) = self.sesslist.get_selected() {
+                                let _ = switch_session(Some(&selected));
+                                close_self();
+                            }
+                        }
+                    },
                     KeyWithModifier {
                         bare_key: BareKey::Backspace,
                         key_modifiers: _,
                     } => {
                         self.textinput.handle_backspace();
-                        self.dirlist
-                            .set_search_term(self.textinput.get_text().as_str());
+                        match self.screen {
+                            Screen::SearchDirs => self
+                                .dirlist
+                                .set_search_term(self.textinput.get_text().as_str()),
+                            Screen::SearchSessions => self
+                                .sesslist
+                                .set_search_term(self.textinput.get_text().as_str()),
+                        }
                     }
                     KeyWithModifier {
                         bare_key: BareKey::Char(c),
                         key_modifiers: _,
                     } => {
                         self.textinput.handle_char(c);
-                        self.dirlist
-                            .set_search_term(self.textinput.get_text().as_str());
+                        match self.screen {
+                            Screen::SearchDirs => self
+                                .dirlist
+                                .set_search_term(self.textinput.get_text().as_str()),
+                            Screen::SearchSessions => self
+                                .sesslist
+                                .set_search_term(self.textinput.get_text().as_str()),
+                        }
                     }
                     _ => (),
                 }
@@ -186,7 +223,10 @@ impl ZellijPlugin for State {
 
     fn render(&mut self, rows: usize, cols: usize) {
         println!();
-        self.dirlist.render(rows.saturating_sub(4), cols);
+        match self.screen {
+            Screen::SearchDirs => self.dirlist.render(rows.saturating_sub(4), cols),
+            Screen::SearchSessions => self.sesslist.render(rows.saturating_sub(4), cols),
+        }
         println!();
         self.textinput.render(rows, cols);
         println!();
