@@ -19,11 +19,8 @@ impl SessList {
     }
 
     pub fn update_sessions(&mut self, sessions: Vec<String>) {
-        self.reset();
-        sessions.iter().for_each(|dir| {
-            self.sessions.push(dir.clone());
-        });
-        self.cursor = self.sessions.len().saturating_sub(1);
+        self.sessions = sessions;
+        // self.cursor = self.sessions.len().saturating_sub(1);
         self.filter();
     }
 
@@ -54,7 +51,7 @@ impl SessList {
 
     pub fn filter(&mut self) {
         self.filtered_sessions = filter::fuzzy_filter(&self.sessions, self.search_term.as_str());
-        self.cursor = self.filtered_sessions.len().saturating_sub(1);
+        // self.cursor = self.filtered_sessions.len().saturating_sub(1);
     }
 
     pub fn render(&self, rows: usize, _cols: usize) {
