@@ -45,7 +45,7 @@ impl SessList {
 
     pub fn kill_selected(&mut self) {
         if let Some(selected) = self.get_selected() {
-            delete_dead_session(&selected);
+            kill_sessions(&[selected]);
         }
     }
 
