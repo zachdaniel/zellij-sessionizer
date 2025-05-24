@@ -99,6 +99,7 @@ impl ZellijPlugin for State {
             EventType::SessionUpdate,
         ]);
         self.dirlist.reset();
+        self.sesslist.reset();
         self.textinput.reset();
         let host = PathBuf::from(ROOT);
         for dir in &self.config.dirs {
@@ -167,7 +168,15 @@ impl ZellijPlugin for State {
                         Screen::SearchDirs => self.dirlist.handle_up(),
                         Screen::SearchSessions => self.sesslist.handle_up(),
                     },
-                    // TODO: add Ctrl+x or Ctrl+d or something along these lines to kill sessions
+                    KeyWithModifier {
+                        bare_key: BareKey::Char('x'),
+                        key_modifiers: km,
+                    } if km.contains(&KeyModifier::Ctrl) => match self.screen {
+                        Screen::SearchDirs => {}
+                        Screen::SearchSessions => {
+                            self.sesslist.kill_selected();
+                        }
+                    },
                     KeyWithModifier {
                         bare_key: BareKey::Enter,
                         key_modifiers: _,

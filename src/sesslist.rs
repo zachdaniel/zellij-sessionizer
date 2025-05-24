@@ -20,7 +20,6 @@ impl SessList {
 
     pub fn update_sessions(&mut self, sessions: Vec<String>) {
         self.sessions = sessions;
-        // self.cursor = self.sessions.len().saturating_sub(1);
         self.filter();
     }
 
@@ -41,6 +40,12 @@ impl SessList {
             Some(self.filtered_sessions[self.cursor].clone())
         } else {
             None
+        }
+    }
+
+    pub fn kill_selected(&mut self) {
+        if let Some(selected) = self.get_selected() {
+            delete_dead_session(&selected);
         }
     }
 
