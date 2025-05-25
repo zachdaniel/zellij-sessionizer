@@ -122,16 +122,22 @@ impl ZellijPlugin for State {
                 self.dirlist.update_dirs(dirs);
                 should_render = true;
             }
-            Event::SessionUpdate(sessions, _) => {
+            Event::SessionUpdate(sessions, resurrectables) => {
                 //TODO: I may want to handle this inside the sess list
                 //and also set the cursor always to the current session
-                for session in sessions.iter() {
-                    if session.is_current_session {
-                        self.current_session = session.name.clone();
+                let alive_sessions = sessions.into_iter().map(|s| {
+                    if s.is_current_session {
+                        self.current_session = s.name.clone();
+                        format!(" {}", s.name)
+                    } else {
+                        format!(" {}", s.name)
                     }
-                }
+                });
+                let resurrectable_sessions = resurrectables
+                    .into_iter()
+                    .map(|(name, _)| format!("󰤄 {}", name));
                 self.sesslist
-                    .update_sessions(sessions.into_iter().map(|s| s.name).collect());
+                    .update_sessions(alive_sessions.chain(resurrectable_sessions).collect());
                 should_render = true;
             }
             Event::Key(key) => {
