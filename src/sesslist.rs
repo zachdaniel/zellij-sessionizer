@@ -1,10 +1,19 @@
+use std::collections::HashMap;
+
 use zellij_tile::prelude::*;
 
 use crate::filter;
 
 #[derive(Debug, Default)]
+pub struct Session {
+    pub name: String,
+    pub icon: String,
+}
+
+#[derive(Debug, Default)]
 pub struct SessList {
     sessions: Vec<String>,
+    session_icons: HashMap<String, String>,
     cursor: usize,
 
     search_term: String,
@@ -14,12 +23,14 @@ pub struct SessList {
 impl SessList {
     pub fn reset(&mut self) {
         self.sessions.clear();
+        self.session_icons.clear();
         self.cursor = 0;
         self.filtered_sessions.clear();
     }
 
-    pub fn update_sessions(&mut self, sessions: Vec<String>) {
-        self.sessions = sessions;
+    pub fn update_sessions(&mut self, sessions: Vec<Session>) {
+        self.sessions = sessions.iter().map(|s| s.name.clone()).collect();
+        self.session_icons = sessions.into_iter().map(|s| (s.name, s.icon)).collect();
         self.filter();
     }
 
@@ -56,7 +67,6 @@ impl SessList {
 
     pub fn filter(&mut self) {
         self.filtered_sessions = filter::fuzzy_filter(&self.sessions, self.search_term.as_str());
-        // self.cursor = self.filtered_sessions.len().saturating_sub(1);
     }
 
     pub fn render(&self, rows: usize, _cols: usize) {
@@ -75,8 +85,13 @@ impl SessList {
             .enumerate()
             .skip(from)
             .take(rows)
-            .for_each(|(i, dir)| {
-                let text = dir.to_string();
+            .for_each(|(i, sess)| {
+                let text = self
+                    .session_icons
+                    .get(sess)
+                    .map(|icon| format!("{icon} {sess}"))
+                    .unwrap()
+                    .to_string();
                 let text_len = text.len();
                 let item = Text::new(text);
                 let item = match i == self.cursor {

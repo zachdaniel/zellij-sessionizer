@@ -12,7 +12,7 @@ mod filter;
 mod sesslist;
 mod textinput;
 use dirlist::DirList;
-use sesslist::SessList;
+use sesslist::{SessList, Session};
 use textinput::TextInput;
 
 const ROOT: &str = "/host";
@@ -128,14 +128,21 @@ impl ZellijPlugin for State {
                 let alive_sessions = sessions.into_iter().map(|s| {
                     if s.is_current_session {
                         self.current_session = s.name.clone();
-                        format!(" {}", s.name)
+                        Session {
+                            name: s.name,
+                            icon: " ".to_string(),
+                        }
                     } else {
-                        format!(" {}", s.name)
+                        Session {
+                            name: s.name,
+                            icon: " ".to_string(),
+                        }
                     }
                 });
-                let resurrectable_sessions = resurrectables
-                    .into_iter()
-                    .map(|(name, _)| format!("󰤄 {}", name));
+                let resurrectable_sessions = resurrectables.into_iter().map(|(name, _)| Session {
+                    name,
+                    icon: "󰤄".to_string(),
+                });
                 self.sesslist
                     .update_sessions(alive_sessions.chain(resurrectable_sessions).collect());
                 should_render = true;
