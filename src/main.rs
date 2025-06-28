@@ -1,6 +1,6 @@
 use zellij_tile::prelude::*;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -41,6 +41,12 @@ struct State {
 
     config: Config,
     debug: String,
+    // Track directories that contain root files
+    valid_dirs: Vec<String>,
+    // Track which directories we're waiting to scan
+    pending_scans: HashSet<PathBuf>,
+    // Track root directories to prevent recursive scanning
+    root_dirs_set: HashSet<PathBuf>,
 }
 
 register_plugin!(State);
@@ -68,19 +74,75 @@ impl State {
         Ok(())
     }
 
-    fn make_dirlist(&mut self, paths: &[(PathBuf, Option<FileMetadata>)]) -> Vec<String> {
-        paths
+    fn process_filesystem_update(&mut self, paths: &[(PathBuf, Option<FileMetadata>)]) {
+        // Process directories from root scans
+        let dirs: Vec<PathBuf> = paths
             .iter()
             .filter(|(p, _)| p.is_dir() && !is_hidden(p))
-            .map(|(p, _)| {
-                if p.starts_with(ROOT) {
-                    self.change_root(p)
-                } else {
-                    p.to_path_buf()
+            .map(|(p, _)| p.clone())
+            .collect();
+            
+        // Check if any of these directories are direct children of our root directories
+        let mut subdirs_to_scan = Vec::new();
+        for dir in &dirs {
+            if let Some(parent) = dir.parent() {
+                if self.root_dirs_set.contains(parent) {
+                    // This is a direct child of a root directory - scan it
+                    subdirs_to_scan.push(dir.clone());
                 }
-            })
-            .map(|p| p.to_string_lossy().to_string())
-            .collect()
+            }
+        }
+        
+        // Scan subdirectories to check for root files
+        for subdir in subdirs_to_scan {
+            self.pending_scans.insert(subdir.clone());
+            scan_host_folder(&subdir);
+        }
+        
+        // Check if we're processing a subdirectory scan (looking for root files)
+        let mut dirs_with_root_files = HashSet::new();
+        let mut processed_pending_dirs = HashSet::new();
+        
+        for (path, _) in paths {
+            if let Some(parent) = path.parent() {
+                if self.pending_scans.contains(parent) {
+                    // This is a scan of a subdirectory we're checking
+                    processed_pending_dirs.insert(parent.to_path_buf());
+                    
+                    if let Some(filename) = path.file_name() {
+                        if let Some(filename_str) = filename.to_str() {
+                            if self.config.root_files.contains(&filename_str.to_string()) {
+                                // Found a root file! The parent directory is valid
+                                dirs_with_root_files.insert(parent.to_path_buf());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Remove all processed pending scans (whether they had root files or not)
+        for dir in &processed_pending_dirs {
+            self.pending_scans.remove(dir);
+        }
+        
+        // Add valid directories to our list
+        for dir in dirs_with_root_files {
+            let display_path = if dir.starts_with(ROOT) {
+                self.change_root(&dir)
+            } else {
+                dir.to_path_buf()
+            };
+            let path_str = display_path.to_string_lossy().to_string();
+            if !self.valid_dirs.contains(&path_str) {
+                self.valid_dirs.push(path_str);
+            }
+        }
+        
+        // Update the directory list with all valid directories
+        if !self.valid_dirs.is_empty() {
+            self.dirlist.update_dirs(self.valid_dirs.clone());
+        }
     }
 }
 
@@ -101,14 +163,30 @@ impl ZellijPlugin for State {
         self.dirlist.reset();
         self.sesslist.reset();
         self.textinput.reset();
+        self.valid_dirs.clear();
+        self.pending_scans.clear();
+        self.root_dirs_set.clear();
+        
         let host = PathBuf::from(ROOT);
-        for dir in &self.config.dirs {
+        // Scan root directories for projects with root files
+        for dir in &self.config.root_dirs {
             let relative_path = match dir.strip_prefix(self.cwd.as_path()) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
             let host_path = host.join(relative_path);
+            self.root_dirs_set.insert(host_path.clone());
             scan_host_folder(&host_path);
+        }
+        
+        // Add direct directories without scanning
+        let direct_dirs: Vec<String> = self.config.dirs
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        if !direct_dirs.is_empty() {
+            self.valid_dirs.extend(direct_dirs);
+            self.dirlist.update_dirs(self.valid_dirs.clone());
         }
         self.screen = Screen::SearchDirs;
         self.textinput_dump = "".to_string();
@@ -118,8 +196,7 @@ impl ZellijPlugin for State {
         let mut should_render = false;
         match event {
             Event::FileSystemUpdate(paths) => {
-                let dirs = self.make_dirlist(&paths);
-                self.dirlist.update_dirs(dirs);
+                self.process_filesystem_update(&paths);
                 should_render = true;
             }
             Event::SessionUpdate(sessions, resurrectables) => {

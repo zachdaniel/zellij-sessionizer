@@ -23,6 +23,12 @@ make dev  # Opens development workspace with hot reload
 make deploy  # Builds and copies to ~/.config/zellij/plugins/
 ```
 
+### Build/Install for User
+When asked to build or install this plugin, the wasm file should be copied to:
+```bash
+~/.dotfiles/zellij/plugins/zellij-sessionizer.wasm
+```
+
 ### Testing
 ```bash
 cargo test
